@@ -227,8 +227,12 @@ def parse_sse_event(data_list):
     return results
 
 
-def send_generate(api_key, channel_id, message, file_infos=None, tpl_info=None):
-    """Trigger PPT generation via SSE, output parsed events as JSON lines."""
+def send_generate(api_key, channel_id, message, file_infos=None, tpl_info=None, output_file=None):
+    """Trigger PPT generation via SSE, output parsed events as JSON lines.
+
+    If output_file is given, each event is also appended to that file so the
+    caller can poll progress without blocking on this function's return.
+    """
     payload = {"isGetJson": True, "channelId": channel_id, "message": message}
     if file_infos:
         payload["fileUrls"] = [fi["url"] for fi in file_infos]
@@ -243,6 +247,14 @@ def send_generate(api_key, channel_id, message, file_infos=None, tpl_info=None):
         json=payload, stream=True,
     )
     resp.raise_for_status()
+
+    def _emit(evt):
+        line_out = json.dumps(evt, ensure_ascii=False)
+        print(line_out)
+        sys.stdout.flush()
+        if output_file:
+            with open(output_file, "a", encoding="utf-8") as fh:
+                fh.write(line_out + "\n")
 
     for line in resp.iter_lines():
         if not line:
@@ -265,9 +277,7 @@ def send_generate(api_key, channel_id, message, file_infos=None, tpl_info=None):
             if evt.get("type") == "pptx_ready":
                 evt["web_url"] = f"https://www.popai.pro/agentic-pptx/{channel_id}"
                 evt["is_end"] = True
-            line_out = json.dumps(evt, ensure_ascii=False)
-            print(line_out)
-            sys.stdout.flush()
+            _emit(evt)
 
             if evt.get("type") in ("stream_end", "error"):
                 return
@@ -275,15 +285,21 @@ def send_generate(api_key, channel_id, message, file_infos=None, tpl_info=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate PPT via PopAI API")
-    parser.add_argument("--query", "-q", required=True, help="PPT topic")
+    parser.add_argument("--query", "-q", required=True, help="PPT topic or modification instruction")
     parser.add_argument("--file", "-f", nargs="*", help="Local files to upload (max 5)")
-    parser.add_argument("--tpl", "-t", help="Local PPT template file to upload")
+    parser.add_argument("--tpl", "-t", help="Local PPT template file to upload (ignored in modify mode)")
+    parser.add_argument("--channel-id", "-c", help="Existing channel ID for multi-round modification (skips channel creation)")
+    parser.add_argument("--output", "-o", help="Path to write progress events (one JSON per line); enables background polling")
     args = parser.parse_args()
 
     api_key = os.getenv("POPAI_API_KEY")
     if not api_key:
         print("Error: POPAI_API_KEY must be set.", file=sys.stderr)
         sys.exit(1)
+
+    # Clear output file before starting so stale content is never read
+    if args.output:
+        open(args.output, "w").close()
 
     try:
         file_infos = None
@@ -295,7 +311,7 @@ def main():
                 print("Error: Maximum 5 files allowed.", file=sys.stderr)
                 sys.exit(1)
             upload_tasks.extend(args.file)
-        if args.tpl:
+        if args.tpl and not args.channel_id:
             upload_tasks.append(args.tpl)
 
         if upload_tasks:
@@ -303,19 +319,30 @@ def main():
                 uploaded = list(pool.map(lambda fp: upload_file(api_key, fp), upload_tasks))
             if args.file:
                 file_infos = uploaded[:len(args.file)]
-            if args.tpl:
+            if args.tpl and not args.channel_id:
                 tpl_info = uploaded[-1]
             print(f"Uploaded {len(uploaded)} file(s).", file=sys.stderr)
 
-        print("Creating channel...", file=sys.stderr)
-        channel_id = create_channel(api_key, args.query, file_infos)
-        print(f"Channel: {channel_id}", file=sys.stderr)
+        if args.channel_id:
+            # Modify mode: reuse existing channel, template cannot be changed
+            channel_id = args.channel_id
+            print(f"Modify mode, channel: {channel_id}", file=sys.stderr)
+            print("Sending modification request...", file=sys.stderr)
+            send_generate(api_key, channel_id, args.query, file_infos, output_file=args.output)
+        else:
+            print("Creating channel...", file=sys.stderr)
+            channel_id = create_channel(api_key, args.query, file_infos)
+            print(f"Channel: {channel_id}", file=sys.stderr)
 
-        print("Generating PPT...", file=sys.stderr)
-        send_generate(api_key, channel_id, args.query, file_infos, tpl_info)
+            print("Generating PPT...", file=sys.stderr)
+            send_generate(api_key, channel_id, args.query, file_infos, tpl_info, output_file=args.output)
 
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        err_evt = json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
+        print(err_evt)
+        if args.output:
+            with open(args.output, "a", encoding="utf-8") as fh:
+                fh.write(err_evt + "\n")
         sys.exit(1)
 
 
