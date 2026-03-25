@@ -283,7 +283,7 @@ def main():
 
     api_key = os.getenv("POPAI_API_KEY")
     if not api_key:
-        print("Error: POPAI_API_KEY must be set.", file=sys.stderr)
+        print("Error: POPAI_API_KEY environment variable is required.", file=sys.stderr)
         sys.exit(1)
 
     try:

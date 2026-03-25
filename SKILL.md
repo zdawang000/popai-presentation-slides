@@ -1,17 +1,16 @@
 ---
 name: popai-presentations
-description: Create presentations (PPT) using PopAI API. Use when asked to create slides, presentations, decks, or PPT content via PopAI. Supports uploading reference files (pptx/pdf/docx/images). Also supports multi-round modifications to an existing PPT.
-metadata: { "openclaw": { "emoji": "📊", "requires": { "bins": ["python3"], "env":["POPAI_API_KEY"]},"primaryEnv":"POPAI_API_KEY" } }
+description: Create presentations (PPT) using PopAI API. Use when asked to create slides, presentations, decks, or PPT content. Has built-in research capabilities — just pass a topic. Supports uploading reference files (pptx/pdf/docx/images) and pptx templates with 100% layout fidelity. Also supports multi-round modifications to an existing PPT.
+metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env":["POPAI_API_KEY"]},"primaryEnv":"POPAI_API_KEY" } }
 ---
 
 # PopAI PPT Skill
-
-Create presentations programmatically via PopAI's API. Supports optional file uploads as reference material or templates. After initial generation, you can send follow-up modification instructions using the same channel ID.
+Create presentations programmatically via PopAI's API. The API has powerful built-in research and information gathering capabilities — it will automatically search, collect, and organize relevant content. Optionally upload files as reference material or templates. If a `.pptx` template is provided, the output will fully preserve the template's layout, styles, and design — 100% faithful reproduction based on your template. After initial generation, you can send follow-up modification instructions using the same channel ID.
 
 ## Setup
 
 1. Get API key from https://www.popai.pro
-2. Store in environment: `export POPAI_API_KEY=...`
+2. Store in environment: `export POPAI_API_KEY=xxx`
 
 ## Scripts
 - `generate_ppt.py` - Generate PPT via PopAI API (upload files → create channel → SSE stream → get pptx); also supports multi-round modification via `--channel-id`
@@ -43,10 +42,12 @@ python3 generate_ppt.py --channel-id "CHANNEL_ID" --query "Update the financial 
 ### Initial Generation
 
 1. Get PPT topic from user
-2. If user provides local files, pass as `--file` (reference, max 5) and/or `--tpl` (PPT template for layout)
-3. Run script (timeout: 600000):
+2. If user provides reference material:
+   - **Local files**: pass as `--file` (max 5) and/or `--tpl` (PPT template for layout)
+   - **URLs**: include directly in the `--query` text — the API will fetch and process them automatically
+3. Run script (timeout: 1200000):
    ```bash
-   POPAI_API_KEY="$POPAI_API_KEY" python3 generate_ppt.py --query "TOPIC" [--file FILE1 FILE2 ...] [--tpl TEMPLATE.pptx]
+   python3 generate_ppt.py --query "TOPIC" [--file FILE1 FILE2 ...] [--tpl TEMPLATE.pptx]
    ```
    Tell user: "Generating your PPT, estimated 5 minutes..."
 4. Parse stdout JSON lines, present final results to user:
@@ -67,9 +68,9 @@ Use when the user wants to revise or improve an already-generated PPT (e.g. "add
 1. Confirm the `channel_id` from the previous generation (stored from `web_url`)
 2. Get modification instruction from user
 3. If user provides additional reference files, pass as `--file`
-4. Run script (timeout: 600000):
+4. Run script (timeout: 1200000):
    ```bash
-   POPAI_API_KEY="$POPAI_API_KEY" python3 generate_ppt.py --channel-id "CHANNEL_ID" --query "MODIFICATION_INSTRUCTION" [--file FILE1 ...]
+   python3 generate_ppt.py --channel-id "CHANNEL_ID" --query "MODIFICATION_INSTRUCTION" [--file FILE1 ...]
    ```
    Tell user: "Applying your modifications, estimated 3-5 minutes..."
 5. Parse and present results the same way as initial generation (new `pptx_url` and `web_url`)
