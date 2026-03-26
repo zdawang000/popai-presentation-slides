@@ -101,13 +101,15 @@ Use when the user wants to revise or improve an already-generated PPT (e.g. "add
   "pptx_url": "https://popai-file-boe.s3-accelerate.amazonaws.com/.../xxx.pptx",
   "file_name": "xxx.pptx",
   "preview_images": ["https://...0.jpeg"],
-  "preview_count": 10,
+  "preview_count": xx,
   "web_url": "https://www.popai.pro/agentic-pptx/<channelId>"
 }
 ```
 
 - `pptx_url`: Download link for the .pptx file
 - `web_url`: PopAI site link for online viewing and editing
+- `preview_images`: Page-by-page screenshots of the generated PPT (one image per slide)
+- `preview_count`: Total number of preview images (i.e. number of slides)
 - `summary`: Final summary text from the `NODE_END` event, shown to the user as a generation recap
 
 ## Support
