@@ -9,7 +9,7 @@ Create presentations programmatically via PopAI's API. The API has powerful buil
 
 ## Setup
 
-1. Get API key from https://www.popai.pro
+1. Get API key from https://www.popai.pro/popai-skill
 2. Store in environment: `export POPAI_ACCESS_TOKEN=xxx`
 
 Tips: You can save the key in `TOOLS.md` for future reference.
