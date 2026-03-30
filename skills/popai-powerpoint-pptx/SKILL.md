@@ -1,5 +1,5 @@
 ---
-name: popai-presentations
+name: popai-powerpoint-pptx
 description: Create presentations (PPT) using PopAI API. Use when asked to create slides, presentations, decks, or PPT content. Has built-in research capabilities — just pass a topic. Supports uploading reference files (pptx/pdf/docx/images). Supports user's own pptx template with 100% layout fidelity. Also supports multi-round modifications to an existing PPT.
 metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env":["POPAI_ACCESS_TOKEN"]},"primaryEnv":"POPAI_ACCESS_TOKEN" } }
 ---
@@ -9,8 +9,8 @@ Create presentations programmatically via PopAI's API. The API has powerful buil
 
 ## Setup
 
-1. Get API key from https://www.popai.pro/popai-skill
-2. Store in environment: `export POPAI_ACCESS_TOKEN=xxx`
+1. Ask user to sign up and obtain their Access Token at: https://www.popai.pro/popai-skill
+2. Once user provides the token, set it in environment: `export POPAI_ACCESS_TOKEN=<token>`
 
 Tips: You can save the key in `TOOLS.md` for future reference.
 
