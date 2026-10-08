@@ -129,7 +129,7 @@ def agent_events(item):
     return [e for e in events if isinstance(e, dict)] if isinstance(events, list) else []
 
 
-def apply_event(event, state, report=True):
+def apply_event(event, state, report=True, historical=False):
     kind = event.get("event") or ""
     message = event.get("message") or {}
     message = message if isinstance(message, dict) else {}
@@ -137,7 +137,13 @@ def apply_event(event, state, report=True):
     if "cot" in kind.lower():
         return
     if event.get("nodeId") == "ERROR":
-        raise RuntimeError(f"Generation error: {param or message.get('action') or 'unknown'}")
+        detail = param or message.get("action") or "unknown"
+        if historical:
+            # A completed failed turn does not invalidate the saved slide deck
+            # or prevent a new instruction from being sent to this channel.
+            state["latest_turn_error"] = detail
+            return
+        raise RuntimeError(f"Generation error: {detail}")
     if kind.startswith("TOOL_CALLS-ask_user_question"):
         state["question"] = param
         state["interactive"] = event.get("interactive") is True
@@ -241,12 +247,15 @@ def current_channel(token, channel_id):
             raise RuntimeError("Latest generation is unfinished; resume or wait in the online channel")
         from_message = {"channel_id": channel_id, "slides": [], "summary": "", "interactive": False}
         for event in agent_events(latest):
-            apply_event(event, from_message, report=False)
+            apply_event(event, from_message, report=False, historical=True)
         if from_message["interactive"]:
             raise RuntimeError("Latest generation requires user input; resume the channel online")
         if not state["slides"]:
             state["slides"] = from_message["slides"]
-        state["summary"] = from_message["summary"]
+        if from_message.get("latest_turn_error"):
+            state["latest_turn_error"] = from_message["latest_turn_error"]
+        else:
+            state["summary"] = from_message["summary"]
     ext = decode(channel.get("ext")) or {}
     config = (ext.get("advanceConfig") or {}) if isinstance(ext, dict) else {}
     ratio = config.get("pptAspectRatio", "16:9")
@@ -326,6 +335,10 @@ def main():
         if not channel_id:
             channel_id = create_channel(token, args.query, files, args.aspect_ratio or "16:9")
         emit("channel", channel_id=channel_id, web_url=f"{WEB}/{channel_id}")
+        if saved and saved.get("latest_turn_error"):
+            emit("history_warning", channel_id=channel_id,
+                 message="The last completed turn was marked failed. Continuing from the saved deck; this does not confirm that the failed turn's requested changes were applied.",
+                 previous_error=saved["latest_turn_error"])
         generated = None if args.export_only else generate(token, channel_id, args.query, files)
         # Read authoritative state after the stream, including the saved title and ratio.
         saved = saved if args.export_only else current_channel(token, channel_id)
@@ -336,6 +349,8 @@ def main():
         result.update(channel_id=channel_id, web_url=f"{WEB}/{channel_id}",
                       preview_images=urls, preview_count=len(urls),
                       summary=(generated["summary"] if generated else "") or saved["summary"])
+        if saved.get("latest_turn_error"):
+            result["latest_turn_error"] = saved["latest_turn_error"]
         if args.output:
             # Preserve the usable export link even if downloading the local file fails.
             emit("export_result", **result, is_end=False)

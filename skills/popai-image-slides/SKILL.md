@@ -24,7 +24,7 @@ The helper supports three modes: generate a new presentation, revise an existing
 
 | Parameter | Value and default | Purpose and applicable modes |
 | --- | --- | --- |
-| `--query`, `-q` | Nonempty text; no default | Required for generation and revision. For generation, describe the topic, audience, language, slide count, content requirements, and visual style. For revision, describe the changes to the existing deck. Include reference URLs directly in this text. Cannot be used with `--export-only`. |
+| `--query`, `-q` | Nonempty text; no default | Required for generation and revision. For generation, describe the topic, audience, language, slide count, content requirements, and visual style. For revision, concisely state the target and desired change, retaining only necessary constraints. Include relevant reference URLs directly in this text. Cannot be used with `--export-only`. |
 | `--file`, `-f` | Local file paths separated by spaces; omitted by default | Optional for generation and revision. Upload up to 5 reference files, such as PDF, DOCX, PPTX, or images. Every path must point to an existing file; quote paths containing spaces. A PPTX file supplies reference content. For revision, these are additional materials for the current request. Cannot be used with `--export-only`. |
 | `--channel-id`, `-c` | Existing image-slides channel ID; omitted by default | Omit for new generation so the helper creates a channel. Required for revision and export-only so the helper reuses that channel. Supply the ID itself, not the full URL: it is the final path segment of `https://www.popai.pro/agentic-sota-ppt/CHANNEL_ID`. The channel must be accessible with the configured token and use the image-slides workflow. |
 | `--export-only` | Flag with no value; disabled by default | Export the current completed presentation without submitting a generation or revision request. Requires `--channel-id`. Cannot be combined with `--query`, `--file`, or `--aspect-ratio`. Useful when only the PPTX is needed or a previous export failed. |
@@ -56,16 +56,24 @@ python3 generate_slides.py \
 
 Use the same `--channel-id` with a new `--query` for each revision. The helper checks the channel, submits the revision, and exports the updated slides to a new PPTX result. It retains the existing channel and saved canvas ratio.
 
+Keep revision instructions as short as possible while preserving an unambiguous meaning. Reuse the user's wording when it is already clear.
+
+- State the target slide or element and the desired change. Include exact text, values, or scope restrictions when needed.
+- Rely on the existing channel for background. Do not repeat the original topic, audience, language, style, slide count, or prior conversation unless this revision changes them or needs that context.
+- Preserve the user's explicit requirements. Do not append tool-use instructions, repeated verification requests, or extra constraints. If the target or intended change cannot be determined from context, clarify that specific point.
+
 Add `--file` when a revision needs new source materials. Add `--output` to download that round's exported PPTX. Use the latest returned download link when delivering the revised deck. If the previous turn is unfinished or awaiting user input, resume it online before submitting another revision.
 
+Web and skill operations share the same server-side channel. Use the same account/access token and `--channel-id` to continue after web edits; the helper refreshes the channel state before working. Wait for a web operation to finish before starting a skill operation on that channel. A completed historical failed turn produces `history_warning` and does not block a new revision. This warning does not prove that the failed turn's requested edits were applied.
+
 ```bash
-# First revision: change content and visual style
-python3 generate_slides.py --channel-id "CHANNEL_ID" --query "Make slide 3 less dense and change the theme to blue"
+# Targeted revision with a clear scope and change
+python3 generate_slides.py --channel-id "CHANNEL_ID" --query "Only change slide 2: replace the symbol between the two apple groups with a plus sign."
 
 # Another revision on the same channel: use new references and save this version
 python3 generate_slides.py \
   --channel-id "CHANNEL_ID" \
-  --query "Update the financial data using this report and add a conclusion slide" \
+  --query "Update slide 4 financial data using the attached report." \
   --file new_report.pdf \
   --output ./revised.pptx
 ```
@@ -75,6 +83,8 @@ python3 generate_slides.py \
 Use `--channel-id` with `--export-only`. The helper reads the channel's current images, title, canvas ratio, and latest turn status, then calls the PPTX export API. It does not create a channel or submit a generation/revision request.
 
 The latest turn must be completed, and every slide must have an accessible image URL. Locked pages, unfinished generation, or pending interactive questions prevent export. This mode is also the recovery path after an export failure: reuse the saved channel ID to request the PPTX again.
+
+If the latest completed turn was marked failed, export-only can still export the saved slide deck. The helper reports `history_warning` and includes `latest_turn_error` in the result. Describe this as exporting the current saved version; do not claim that the failed edit succeeded.
 
 ```bash
 # Export the current deck and return its PPTX download URL
@@ -86,7 +96,7 @@ python3 generate_slides.py --channel-id "CHANNEL_ID" --export-only --output ./pr
 
 ## Agent workflow
 
-1. Preserve the user's topic, materials, and visual preferences in `--query`. Include reference URLs directly in the query; pass local files with `--file`.
+1. For new generation, preserve the user's topic, materials, and visual preferences in `--query`. For revisions, pass a concise, unambiguous instruction following the revision guidance above. Include relevant reference URLs directly in the query; pass local files with `--file`.
 2. Run the helper with a generation budget of up to 20 minutes. Monitor its JSON lines and report useful task/search/image/export progress while it runs. Do not give a fixed completion-time guarantee.
 3. Save the `channel_id` and `web_url` from the initial `channel` event for follow-up edits or export recovery.
 4. `slides_ready` reports generated page images, with `is_end: false`. Continue through `stream_end` and `exporting`; the helper invokes the PPTX export API automatically.
@@ -97,7 +107,7 @@ An `ask_user_question` event can be informational while the service waits for it
 
 ## Output
 
-Stdout contains one JSON object per line. Progress events include `channel`, `task`, `search`, `tool_result`, `question`, `summary`, `slides_ready`, `stream_end`, and `exporting`. Errors exit nonzero. Stderr contains diagnostics.
+Stdout contains one JSON object per line. Progress events include `channel`, `history_warning`, `task`, `search`, `tool_result`, `question`, `summary`, `slides_ready`, `stream_end`, and `exporting`. Errors in the current operation exit nonzero. A failed historical turn is reported as a warning. Stderr contains diagnostics.
 
 ```json
 {"type":"channel","channel_id":"CHANNEL_ID","web_url":"https://www.popai.pro/agentic-sota-ppt/CHANNEL_ID"}
@@ -107,6 +117,8 @@ Stdout contains one JSON object per line. Progress events include `channel`, `ta
 ```
 
 `local_path` is included only when the PPTX was downloaded and its package validated. `fallback_url` is included when the export service supplies it.
+
+`latest_turn_error` is included when the refreshed channel's latest completed turn was marked failed. It describes historical state, not a failure of the current file export. Errors in the current generation stream still stop the operation and prevent successful export reporting.
 
 ## API notes
 
