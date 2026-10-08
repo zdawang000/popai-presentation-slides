@@ -1,56 +1,34 @@
-# PopAI Presentation Skill
+# PopAI Presentation Skills
 
-A Cursor skill for generating professional presentations (PPTX) via [PopAI](https://www.popai.pro) API.
-PopAI has built-in research capabilities - it will automatically search, collect, and organize relevant content into a polished slide deck.
+[PopAI](https://www.popai.pro) creates presentations from a topic and optional reference materials. Its built-in research capabilities help search, collect, and organize content into a slide deck.
+
+This repository provides two skills for generating presentations through the PopAI API. Both support reference materials and follow-up revisions, and deliver a PowerPoint (.pptx) file.
+
+## Choose a Mode
+
+- **Have a .pptx template?** Prefer **popai-powerpoint-pptx** to create a presentation using the template's layout and styles.
+- **For all other cases, use popai-image-slides (image-slides).** This is the recommended default for creating presentations.
+
+| Skill | How it works | Documentation |
+| --- | --- | --- |
+| **popai-powerpoint-pptx** | Generates a PowerPoint presentation, with support for a custom .pptx template. | [Setup and usage](skills/popai-powerpoint-pptx/SKILL.md) |
+| **popai-image-slides** | Uses image models to generate slide images, then exports them to a PowerPoint file. | [Setup and usage](skills/popai-image-slides/SKILL.md) |
+
+See each skill's documentation for generation and revision instructions.
 
 ## Setup
 
-1. Sign up / sign in at [https://www.popai.pro/popai-skill](https://www.popai.pro/popai-skill)
-2. Copy your **Access Token** from the PopAI Skill page
-3. Export the token in your shell:
+Both skills require the `POPAI_ACCESS_TOKEN` environment variable.
+
+1. Sign up or sign in at the [PopAI Skill page](https://www.popai.pro/popai-skill).
+2. Copy your **Access Token**.
+3. Set it in the shell where you will run the skill:
 
 ```bash
-export POPAI_ACCESS_TOKEN=<your_token>
+export POPAI_ACCESS_TOKEN="<your_token>"
 ```
 
-## Usage
-
-> **Important:** The `--query` must be a **meaningful presentation topic** (e.g. "2025 Global AI Industry Trends and Investment Outlook"). Vague or irrelevant queries such as `"test"`, `"hello"`, or `"asdf"` will cause the generation to fail. The API needs a real topic to research and build slides from.
-
-```bash
-# Generate from a specific topic
-python3 skills/popai-powerpoint-pptx/generate_ppt.py --query "2025 Global AI Industry Trends and Investment Outlook"
-
-# With reference files (max 5)
-python3 skills/popai-powerpoint-pptx/generate_ppt.py --query "Tesla Q4 2024 Earnings Summary" --file earnings.pdf revenue_chart.png
-
-# With a custom .pptx template (preserves layout & styles)
-python3 skills/popai-powerpoint-pptx/generate_ppt.py --query "Annual Sustainability Report for Acme Corp" --tpl branded_template.pptx
-
-# Multi-round modification on an existing deck
-python3 skills/popai-powerpoint-pptx/generate_ppt.py --channel-id "CHANNEL_ID" --query "Add a competitive analysis slide"
-```
-
-## Project Structure
-
-```
-skills/
-  popai-powerpoint-pptx/
-    SKILL.md          # Skill definition & agent workflow instructions
-    generate_ppt.py   # CLI script for PPT generation
-```
-
-## Features
-
-- **Topic-based generation** — provide a topic and get a complete deck with researched content
-- **Reference files** — upload PDFs, images, or documents as source material (`--file`)
-- **Template support** — supply your own `.pptx` template for 100% layout fidelity (`--tpl`)
-- **Multi-round editing** — refine an existing deck by passing `--channel-id` with new instructions
-- **URL references** — include URLs directly in the query for the API to fetch and process
-
-## More Capabilities
-
-For the full list of capabilities, agent workflow details, output event formats, and multi-round modification rules, see [`skills/popai-powerpoint-pptx/SKILL.md`](skills/popai-powerpoint-pptx/SKILL.md).
+Replace `<your_token>` with your access token.
 
 ## Support
 
