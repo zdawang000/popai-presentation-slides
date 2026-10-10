@@ -20,7 +20,7 @@ See each skill's documentation for its supported operations.
 
 ## Setup
 
-Generation requires the `POPAI_ACCESS_TOKEN` environment variable. The production skills use a PopAI token; **image-pptx-slides** requires a token for a beta account with access to [the beta environment](https://beta.01ww.org). Downloading an existing PPTX URL with the beta skill does not require a token.
+The production skills use `POPAI_ACCESS_TOKEN`. **image-pptx-slides** uses the separate `POPAI_BETA_ACCESS_TOKEN` variable for a beta account with access to [the beta environment](https://beta.01ww.org). Downloading an existing PPTX URL with the beta skill does not require a token.
 
 For the production skills:
 
@@ -33,6 +33,14 @@ export POPAI_ACCESS_TOKEN="<your_token>"
 ```
 
 Replace `<your_token>` with your access token.
+
+For **image-pptx-slides**, set the beta token instead:
+
+```bash
+export POPAI_BETA_ACCESS_TOKEN="<beta_access_token>"
+```
+
+See [the beta skill documentation](skills/image-pptx-slides/SKILL.md) for setup and usage.
 
 ## Support
 

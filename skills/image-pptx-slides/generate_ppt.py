@@ -256,9 +256,9 @@ def main():
         for file_path in args.file:
             if not Path(file_path).is_file():
                 parser.error(f"Reference file not found: {file_path}")
-        token = os.getenv("POPAI_ACCESS_TOKEN")
+        token = os.getenv("POPAI_BETA_ACCESS_TOKEN")
         if not token or not token.strip():
-            parser.error("POPAI_ACCESS_TOKEN environment variable with beta access is required")
+            parser.error("POPAI_BETA_ACCESS_TOKEN environment variable with beta access is required")
     channel_id = None
     try:
         if args.download_url:

@@ -1,7 +1,7 @@
 ---
 name: image-pptx-slides
 description: 使用 PopAI beta 环境的图片模型与 PowerPoint SDK 生成可编辑的 PowerPoint (.pptx) 文件。当用户要求通过图片模型制作可编辑 PPT，或明确指定 image-pptx-slides、beta.01ww.org/agentic-pptx 时使用。支持首轮生成、参考文件上传及 PPTX 下载。
-metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env": ["POPAI_ACCESS_TOKEN"] }, "primaryEnv": "POPAI_ACCESS_TOKEN" } }
+metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env": ["POPAI_BETA_ACCESS_TOKEN"] }, "primaryEnv": "POPAI_BETA_ACCESS_TOKEN" } }
 ---
 
 # Image PPTX Slides（内测版）
@@ -17,10 +17,10 @@ API 环境固定为 `https://api.01ww.org`。仅支持首轮生成和下载，�
 
 ```bash
 python3 -m pip install requests
-export POPAI_ACCESS_TOKEN="<beta_access_token>"
+export POPAI_BETA_ACCESS_TOKEN="<beta_access_token>"
 ```
 
-从 beta 账号获取令牌；不要假定生产环境令牌可用于 beta。通过环境变量传入令牌，不把它写入 skill、脚本或输出日志。
+从 beta 账号获取令牌，通过独立变量 `POPAI_BETA_ACCESS_TOKEN` 传入；脚本不会回退读取线上环境的 `POPAI_ACCESS_TOKEN`。不把令牌写入 skill、脚本或输出日志。
 
 脚本为本 skill 目录中的 `generate_ppt.py`。下面的命令在该目录执行；从其他目录调用时使用脚本的绝对路径。
 
@@ -49,7 +49,7 @@ python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主�
 | `--query` / `-q` | 首轮生成需求，必须为非空文本。页数、语言、风格和参考网页 URL 都写在这里；这些要求由服务端 agent 处理。与 `--download-url` 互斥。 |
 | `--file` / `-f` | 可选，本地参考文件路径，单次最多 5 个，如 PDF、DOCX、PPTX、图片、表格。上传后用于本次生成的内容参考；不将 PPTX 文件自动应用为版式模板。仅用于生成。 |
 | `--output` / `-o` | 可选，本地 `.pptx` 保存路径。生成时省略此参数只返回下载地址；提供此参数则等待生成完成后下载。支持创建父目录，输出绝对路径。单独下载时必须提供。 |
-| `--download-url` | 从已获得的 PPTX HTTP(S) 地址单独下载，不创建会话、不发起生成，也不需要 `POPAI_ACCESS_TOKEN`。必须同时提供 `--output`，不能与 `--query` 或 `--file` 混用。 |
+| `--download-url` | 从已获得的 PPTX HTTP(S) 地址单独下载，不创建会话、不发起生成，也不需要 `POPAI_BETA_ACCESS_TOKEN`。必须同时提供 `--output`，不能与 `--query` 或 `--file` 混用。 |
 | `--help` / `-h` | 显示参数帮助，不调用 API。 |
 
 ### 执行与完成判定
