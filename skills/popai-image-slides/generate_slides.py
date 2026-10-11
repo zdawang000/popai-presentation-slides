@@ -304,24 +304,25 @@ def download_pptx(result, output):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--query", "-q", help="Presentation topic or revision instruction")
-    parser.add_argument("--file", "-f", nargs="*", default=[], help="Local reference files (max 5)")
+    parser.add_argument("--files", "-f", nargs="+", action="extend", default=[], metavar="FILE",
+                        help="Local reference files of any format, separated by spaces (1-5 files total)")
     parser.add_argument("--channel-id", "-c", help="Existing image-slides channel ID")
     parser.add_argument("--export-only", action="store_true", help="Export a completed channel without generation")
     parser.add_argument("--aspect-ratio", choices=STYLES, help="New deck canvas ratio (default: 16:9)")
     parser.add_argument("--output", "-o", help="Download and validate the PPTX at this local path")
     args = parser.parse_args()
     if args.export_only:
-        if not args.channel_id or args.query or args.file or args.aspect_ratio:
-            parser.error("--export-only requires --channel-id and excludes --query, --file, --aspect-ratio")
+        if not args.channel_id or args.query or args.files or args.aspect_ratio:
+            parser.error("--export-only requires --channel-id and excludes --query, --files, --aspect-ratio")
     elif not args.query or not args.query.strip():
         parser.error("--query is required for generation or revision")
     if args.channel_id and args.aspect_ratio:
         parser.error("--aspect-ratio applies only to new channels")
-    if len(args.file) > 5:
+    if len(args.files) > 5:
         parser.error("Maximum 5 reference files allowed")
-    for file_path in args.file:
+    for file_path in args.files:
         if not Path(file_path).is_file():
             parser.error(f"Reference file not found: {file_path}")
     token = os.getenv("POPAI_ACCESS_TOKEN")
@@ -331,7 +332,7 @@ def main():
     try:
         # Check channel ownership/type/completion before uploading references or revising.
         saved = current_channel(token, channel_id) if channel_id else None
-        files = [upload_file(token, f) for f in args.file]
+        files = [upload_file(token, f) for f in args.files]
         if not channel_id:
             channel_id = create_channel(token, args.query, files, args.aspect_ratio or "16:9")
         emit("channel", channel_id=channel_id, web_url=f"{WEB}/{channel_id}")

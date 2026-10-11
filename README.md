@@ -1,8 +1,12 @@
 # PopAI Presentation Skills
 
-[PopAI](https://www.popai.pro) creates presentations from a topic and optional reference materials. Its built-in research capabilities help search, collect, and organize content into a slide deck.
+[PopAI](https://www.popai.pro) creates presentations from a topic and reference materials. Its built-in `deep_research` tool can search the web and collect information needed for a slide deck. Describe online research needs and relevant URLs in `--query`.
 
 This repository provides three skills for generating presentations through the PopAI API. All support reference materials and deliver a PowerPoint (.pptx) file. The beta skill supports initial generation and download only.
+
+If the slides depend on local materials, you **must upload those materials through `--files`**. PopAI cannot read the caller's local filesystem or files merely mentioned by name or path in `--query`; web research cannot supply missing local information. Without uploading the required files, PopAI will lack the source information needed to make the requested slides.
+
+Use `--files FILE1 FILE2 ...` to upload up to **5 local reference files per request**, including mixed formats. Files can be in **any format**, including documents, images, spreadsheets, audio, video, Markdown, and source code. Quote paths containing spaces. For example: `--files "meeting notes.md" interview.mp3 demo.mp4 main.py data.xlsx`.
 
 ## Choose a Mode
 

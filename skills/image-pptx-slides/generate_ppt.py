@@ -236,24 +236,25 @@ def download_pptx(url, output):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--query", "-q", help="Initial presentation requirements")
     mode.add_argument("--download-url", help="Download an existing PPTX URL without generation")
-    parser.add_argument("--file", "-f", nargs="+", default=[], help="Local reference files (max 5)")
+    parser.add_argument("--files", "-f", nargs="+", action="extend", default=[], metavar="FILE",
+                        help="Local reference files of any format, separated by spaces (1-5 files total)")
     parser.add_argument("--output", "-o", help="Download and validate the PPTX at this local .pptx path")
     args = parser.parse_args()
     if args.output and Path(args.output).suffix.lower() != ".pptx":
         parser.error("--output must have the .pptx extension")
     if args.download_url:
-        if not http_url(args.download_url) or not args.output or args.file:
-            parser.error("--download-url requires an HTTP(S) URL and --output, and excludes --file")
+        if not http_url(args.download_url) or not args.output or args.files:
+            parser.error("--download-url requires an HTTP(S) URL and --output, and excludes --files")
     else:
         if not args.query.strip():
             parser.error("--query must be nonempty")
-        if len(args.file) > 5:
+        if len(args.files) > 5:
             parser.error("Maximum 5 reference files allowed")
-        for file_path in args.file:
+        for file_path in args.files:
             if not Path(file_path).is_file():
                 parser.error(f"Reference file not found: {file_path}")
         token = os.getenv("POPAI_BETA_ACCESS_TOKEN")
@@ -266,7 +267,7 @@ def main():
             emit("download_ready", pptx_url=args.download_url, local_path=local_path, is_end=True)
             return 0
         files = []
-        for file_path in args.file:
+        for file_path in args.files:
             emit("uploading", file_name=Path(file_path).name)
             files.append(upload_file(token, file_path))
         channel_id = create_channel(token, args.query, files)

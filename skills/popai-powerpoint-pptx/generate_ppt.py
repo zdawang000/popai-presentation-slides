@@ -2,7 +2,7 @@
 """
 PopAI PPT Generator
 Generates presentations via PopAI API.
-Supports optional local file upload (max 5).
+Supports optional local reference files of any format via --files (max 5).
 """
 
 import os
@@ -274,9 +274,10 @@ def send_generate(api_key, channel_id, message, file_infos=None, tpl_info=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate PPT via PopAI API")
+    parser = argparse.ArgumentParser(description="Generate PPT via PopAI API", allow_abbrev=False)
     parser.add_argument("--query", "-q", required=True, help="PPT topic or modification instruction")
-    parser.add_argument("--file", "-f", nargs="*", help="Local files to upload (max 5)")
+    parser.add_argument("--files", "-f", nargs="+", action="extend", default=[], metavar="FILE",
+                        help="Local reference files of any format, separated by spaces (1-5 files total)")
     parser.add_argument("--tpl", "-t", help="Local PPT template file to upload (ignored in modify mode)")
     parser.add_argument("--channel-id", "-c", help="Existing channel ID for multi-round modification (skips channel creation)")
     args = parser.parse_args()
@@ -291,19 +292,19 @@ def main():
         tpl_info = None
         upload_tasks = []
 
-        if args.file:
-            if len(args.file) > 5:
+        if args.files:
+            if len(args.files) > 5:
                 print("Error: Maximum 5 files allowed.", file=sys.stderr)
                 sys.exit(1)
-            upload_tasks.extend(args.file)
+            upload_tasks.extend(args.files)
         if args.tpl and not args.channel_id:
             upload_tasks.append(args.tpl)
 
         if upload_tasks:
             with ThreadPoolExecutor(max_workers=min(len(upload_tasks), 6)) as pool:
                 uploaded = list(pool.map(lambda fp: upload_file(api_key, fp), upload_tasks))
-            if args.file:
-                file_infos = uploaded[:len(args.file)]
+            if args.files:
+                file_infos = uploaded[:len(args.files)]
             if args.tpl and not args.channel_id:
                 tpl_info = uploaded[-1]
             print(f"Uploaded {len(uploaded)} file(s).", file=sys.stderr)

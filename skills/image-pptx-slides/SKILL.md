@@ -1,6 +1,6 @@
 ---
 name: image-pptx-slides
-description: 使用 PopAI beta 环境的图片模型与 PowerPoint SDK 生成可编辑的 PowerPoint (.pptx) 文件。当用户要求通过图片模型制作可编辑 PPT，或明确指定 image-pptx-slides、beta.01ww.org/agentic-pptx 时使用。支持首轮生成、参考文件上传及 PPTX 下载。
+description: 使用 PopAI beta 环境的图片模型与 PowerPoint SDK 生成可编辑的 PowerPoint (.pptx) 文件。当用户要求通过图片模型制作可编辑 PPT，或明确指定 image-pptx-slides、beta.01ww.org/agentic-pptx 时使用。支持首轮生成、任意格式的本地参考文件上传（单次最多 5 个）及 PPTX 下载。
 metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env": ["POPAI_BETA_ACCESS_TOKEN"] }, "primaryEnv": "POPAI_BETA_ACCESS_TOKEN" } }
 ---
 
@@ -26,7 +26,11 @@ export POPAI_BETA_ACCESS_TOKEN="<beta_access_token>"
 
 ## 首轮生成
 
-将用户的主题、受众、页数、语言和视觉要求合并成一条清晰的 `--query`。保留用户已给出的要求；常规选择可以直接补全，不必为调用接口重复确认。网页链接直接写入 query；本地参考材料通过 `--file` 上传。
+将用户的主题、受众、页数、语言和视觉要求合并成一条清晰的 `--query`。保留用户已给出的要求；常规选择可以直接补全，不必为调用接口重复确认。
+
+PopAI 内置 `deep_research` 工具。需要联网搜索的信息，可以在 `--query` 中说明搜集需求，并附上相关网页链接，由 PopAI 搜索和整理。若制作 slides 依赖本地资料，则必须通过 `--files` 上传这些资料。PopAI 无法直接读取调用方的本地文件，也无法仅凭 query 中的文件名或路径获取文件内容；联网搜索不能替代缺失的本地资料。不上传所需文件，就无法获得足够的资料信息来完成用户要求的 slides。
+
+本地参考文件支持任意格式，包括但不限于 PDF、DOCX、PPTX、图片、表格、音频、视频、Markdown（`.md`）和代码文件。用户提供本地材料时，直接通过 `--files` 传入，无需先转换为文档或粘贴到 query。一次可混合传入 1–5 个文件，多个路径用空格分隔，含空格的路径加引号。
 
 ```bash
 # 生成并提供下载地址
@@ -36,9 +40,9 @@ python3 generate_ppt.py --query "为一年级小朋友制作6页中文PPT，介�
 python3 generate_ppt.py --query "制作6页中文产品介绍，面向潜在客户。" \
   --output "/absolute/path/产品介绍.pptx"
 
-# 使用参考文件
+# 一次使用 5 个不同格式的本地参考文件
 python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主要发现。" \
-  --file "/absolute/path/报告.pdf" "/absolute/path/数据.xlsx" \
+  --files "/absolute/path/说明.md" "/absolute/path/访谈.mp3" "/absolute/path/演示.mp4" "/absolute/path/main.py" "/absolute/path/数据.xlsx" \
   --output "/absolute/path/汇报.pptx"
 ```
 
@@ -47,9 +51,9 @@ python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主�
 | 参数 | 作用与约束 |
 | --- | --- |
 | `--query` / `-q` | 首轮生成需求，必须为非空文本。页数、语言、风格和参考网页 URL 都写在这里；这些要求由服务端 agent 处理。与 `--download-url` 互斥。 |
-| `--file` / `-f` | 可选，本地参考文件路径，单次最多 5 个，如 PDF、DOCX、PPTX、图片、表格。上传后用于本次生成的内容参考；不将 PPTX 文件自动应用为版式模板。仅用于生成。 |
+| `--files` / `-f` | 依赖本地资料时必传；无本地资料依赖时可省略。传入 1–5 个任意格式的本地参考文件，多个路径用空格分隔，可混合格式；重复使用此参数时合计仍最多 5 个。每个路径必须指向已存在的文件，含空格的路径加引号。上传后用于本次生成的内容参考；不将 PPTX 文件自动应用为版式模板。仅用于生成。 |
 | `--output` / `-o` | 可选，本地 `.pptx` 保存路径。生成时省略此参数只返回下载地址；提供此参数则等待生成完成后下载。支持创建父目录，输出绝对路径。单独下载时必须提供。 |
-| `--download-url` | 从已获得的 PPTX HTTP(S) 地址单独下载，不创建会话、不发起生成，也不需要 `POPAI_BETA_ACCESS_TOKEN`。必须同时提供 `--output`，不能与 `--query` 或 `--file` 混用。 |
+| `--download-url` | 从已获得的 PPTX HTTP(S) 地址单独下载，不创建会话、不发起生成，也不需要 `POPAI_BETA_ACCESS_TOKEN`。必须同时提供 `--output`，不能与 `--query` 或 `--files` 混用。 |
 | `--help` / `-h` | 显示参数帮助，不调用 API。 |
 
 ### 执行与完成判定

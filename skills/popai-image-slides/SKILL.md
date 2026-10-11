@@ -1,12 +1,14 @@
 ---
 name: popai-image-slides
-description: Create image-model slides with PopAI, revise an existing image-slides presentation, and export the generated slide images to a final PPTX. Use for image-based or creative slides and PopAI agentic-sota-ppt links.
+description: Create image-model slides with PopAI, revise an existing image-slides presentation, and export the generated slide images to a final PPTX. Supports up to 5 local reference files of any format per request. Use for image-based or creative slides and PopAI agentic-sota-ppt links.
 metadata: { "openclaw": { "emoji": "🖼️", "requires": { "bins": ["python3"], "env": ["POPAI_ACCESS_TOKEN"] }, "primaryEnv": "POPAI_ACCESS_TOKEN" } }
 ---
 
 # PopAI Image Slides
 
-Create slides with PopAI's image-model workflow at https://www.popai.pro/agentic-sota-ppt. Supply a meaningful topic, audience, language, slide count, and visual preferences when available. The service can research a topic and use uploaded reference files or URLs included in the prompt.
+Create slides with PopAI's image-model workflow at https://www.popai.pro/agentic-sota-ppt. Supply a meaningful topic, audience, language, slide count, and visual preferences when available. PopAI has a built-in `deep_research` tool for searching the web and collecting information. Describe online research needs and relevant URLs in `--query` so PopAI can gather those materials.
+
+If the slides depend on local materials, you must upload those materials with `--files FILE1 FILE2 ...`. PopAI cannot read the caller's local filesystem or retrieve files merely named or referenced by path in `--query`. Web research cannot replace missing local materials; without uploading them, PopAI will lack the source information needed to make the requested slides. Accept any file format, including documents, images, spreadsheets, audio, video, Markdown (`.md`), and source code; no conversion to documents is needed. Mix formats in one request, with up to 5 files total.
 
 This workflow generates slide images first. After generation finishes, call the site's Download → PowerPoint (.pptx) export API to obtain the final PPTX. An image URL, preview list, summary, or stream-end event is not a PPTX download result. Do not promise editable text/shapes or faithful reproduction of a supplied PowerPoint template; this is an image-based presentation workflow.
 
@@ -25,9 +27,9 @@ The helper supports three modes: generate a new presentation, revise an existing
 | Parameter | Value and default | Purpose and applicable modes |
 | --- | --- | --- |
 | `--query`, `-q` | Nonempty text; no default | Required for generation and revision. For generation, describe the topic, audience, language, slide count, content requirements, and visual style. For revision, concisely state the target and desired change, retaining only necessary constraints. Include relevant reference URLs directly in this text. Cannot be used with `--export-only`. |
-| `--file`, `-f` | Local file paths separated by spaces; omitted by default | Optional for generation and revision. Upload up to 5 reference files, such as PDF, DOCX, PPTX, or images. Every path must point to an existing file; quote paths containing spaces. A PPTX file supplies reference content. For revision, these are additional materials for the current request. Cannot be used with `--export-only`. |
+| `--files`, `-f` | 1–5 local file paths separated by spaces; omitted by default | Required when generation or revision depends on local materials; otherwise optional. Upload reference files of any format; mixed formats are supported. Repeated uses of this option share the same 5-file limit. Every path must point to an existing file; quote paths containing spaces. A PPTX file supplies reference content. For revision, these are additional materials for the current request. Cannot be used with `--export-only`. |
 | `--channel-id`, `-c` | Existing image-slides channel ID; omitted by default | Omit for new generation so the helper creates a channel. Required for revision and export-only so the helper reuses that channel. Supply the ID itself, not the full URL: it is the final path segment of `https://www.popai.pro/agentic-sota-ppt/CHANNEL_ID`. The channel must be accessible with the configured token and use the image-slides workflow. |
-| `--export-only` | Flag with no value; disabled by default | Export the current completed presentation without submitting a generation or revision request. Requires `--channel-id`. Cannot be combined with `--query`, `--file`, or `--aspect-ratio`. Useful when only the PPTX is needed or a previous export failed. |
+| `--export-only` | Flag with no value; disabled by default | Export the current completed presentation without submitting a generation or revision request. Requires `--channel-id`. Cannot be combined with `--query`, `--files`, or `--aspect-ratio`. Useful when only the PPTX is needed or a previous export failed. |
 | `--aspect-ratio` | `16:9` or `4:3`; defaults to `16:9` for new generation | Set the canvas ratio when creating a new presentation. Cannot be used with `--channel-id`. Revision and export use the ratio saved in the existing channel. |
 | `--output`, `-o` | Local output file path; omitted by default | Optional in all three modes. After export, download the PPTX to this path, validate its PowerPoint package, and return `local_path`. Use a `.pptx` filename. Relative paths resolve from the process's working directory; missing parent directories are created. A successful download replaces an existing file at that path. Without this option, the helper returns the download URL without saving the file locally. |
 | `--help`, `-h` | Flag with no value | Display CLI usage and exit without API calls; no token is required. |
@@ -36,7 +38,7 @@ The helper supports three modes: generate a new presentation, revise an existing
 
 ### Generate a new presentation
 
-Use `--query` without `--channel-id`. Optionally supply reference files, the canvas ratio, and a local output path.
+Use `--query` without `--channel-id`. Supply `--files` whenever the presentation depends on local materials. Optionally set the canvas ratio and a local output path.
 
 The helper uploads references, creates an image-slides channel, generates slide images, and then calls the PPTX export API. Save the returned `channel_id` for later revisions or exports.
 
@@ -44,10 +46,10 @@ The helper uploads references, creates an image-slides channel, generates slide 
 # Topic only; use the default 16:9 canvas and return the PPTX download URL
 python3 generate_slides.py --query "Create 8 Chinese slides about AI industry trends for investors, with a dark technology theme"
 
-# Use references, select a 4:3 canvas, and download the exported file locally
+# Use 5 local references of mixed formats, select a 4:3 canvas, and download locally
 python3 generate_slides.py \
-  --query "Create 6 Chinese slides summarizing this report for executives, with a clean blue theme" \
-  --file "Annual Report.pdf" chart.png \
+  --query "Create 6 Chinese slides summarizing these materials for executives, with a clean blue theme" \
+  --files "meeting notes.md" interview.mp3 demo.mp4 main.py data.xlsx \
   --aspect-ratio 4:3 \
   --output ./report.pptx
 ```
@@ -62,7 +64,7 @@ Keep revision instructions as short as possible while preserving an unambiguous 
 - Rely on the existing channel for background. Do not repeat the original topic, audience, language, style, slide count, or prior conversation unless this revision changes them or needs that context.
 - Preserve the user's explicit requirements. Do not append tool-use instructions, repeated verification requests, or extra constraints. If the target or intended change cannot be determined from context, clarify that specific point.
 
-Add `--file` when a revision needs new source materials. Add `--output` to download that round's exported PPTX. Use the latest returned download link when delivering the revised deck. If the previous turn is unfinished or awaiting user input, resume it online before submitting another revision.
+Add `--files` when a revision needs new source materials. Add `--output` to download that round's exported PPTX. Use the latest returned download link when delivering the revised deck. If the previous turn is unfinished or awaiting user input, resume it online before submitting another revision.
 
 Web and skill operations share the same server-side channel. Use the same account/access token and `--channel-id` to continue after web edits; the helper refreshes the channel state before working. Wait for a web operation to finish before starting a skill operation on that channel. A completed historical failed turn produces `history_warning` and does not block a new revision. This warning does not prove that the failed turn's requested edits were applied.
 
@@ -74,7 +76,7 @@ python3 generate_slides.py --channel-id "CHANNEL_ID" --query "Only change slide 
 python3 generate_slides.py \
   --channel-id "CHANNEL_ID" \
   --query "Update slide 4 financial data using the attached report." \
-  --file new_report.pdf \
+  --files new_report.pdf \
   --output ./revised.pptx
 ```
 
@@ -96,7 +98,7 @@ python3 generate_slides.py --channel-id "CHANNEL_ID" --export-only --output ./pr
 
 ## Agent workflow
 
-1. For new generation, preserve the user's topic, materials, and visual preferences in `--query`. For revisions, pass a concise, unambiguous instruction following the revision guidance above. Include relevant reference URLs directly in the query; pass local files with `--file`.
+1. For new generation, preserve the user's topic, materials, and visual preferences in `--query`. For revisions, pass a concise, unambiguous instruction following the revision guidance above. Include relevant reference URLs directly in the query; pass local files with `--files`.
 2. Run the helper with a generation budget of up to 20 minutes. Monitor its JSON lines and report useful task/search/image/export progress while it runs. Do not give a fixed completion-time guarantee.
 3. Save the `channel_id` and `web_url` from the initial `channel` event for follow-up edits or export recovery.
 4. `slides_ready` reports generated page images, with `is_end: false`. Continue through `stream_end` and `exporting`; the helper invokes the PPTX export API automatically.
