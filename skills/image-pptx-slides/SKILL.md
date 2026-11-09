@@ -59,7 +59,7 @@ python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主�
 ### 执行与完成判定
 
 1. 检查 beta 令牌和参考文件，调用脚本。为长任务预留最多 20 分钟，并根据 stdout 的 JSON 行向用户报告有效进度。
-2. 脚本上传材料，调用 `getChannel`（`templateId: "900012"`），随后调用 `/api/v1/chat/send`，读取 SSE。
+2. 脚本上传材料，调用 `getChannel`（`templateId: "900021"`），随后调用 `/api/v1/chat/send`，读取 SSE。
 3. `TOOL_CALLS-pptx`（或 `nodeId: "pptx"`）中的 `media[0].url` 是服务端 SDK 产出的 PPTX；`imgList` 是预览截图。直接使用 PPTX 地址下载，不能将截图重新打包作为可编辑文件交付。
 4. 等待 `last: true` 且本次没有错误，再检查是否取得非空 PPTX 地址。只有最终 `pptx_ready` 且 `is_end: true` 才能报告成功；预览、工具调用及自然语言总结都不能单独证明完成。
 5. 交付 `pptx_url` 和 beta `web_url`；如指定了 `--output`，同时交付 `local_path`。可补充 `summary`，但完成状态以脚本结果为准。

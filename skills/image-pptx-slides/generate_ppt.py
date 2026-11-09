@@ -91,8 +91,8 @@ def upload_file(token, file_path):
 
 
 def create_channel(token, query, files):
-    # Beta routes 900012 to ImagePptxAgentWorkflowChatEntity, producing SDK-native PPTX.
-    payload = {"templateId": "900012", "message": query}
+    # Beta image-PPTX template for editable SDK-generated presentations.
+    payload = {"templateId": "900021", "message": query}
     if files:
         payload.update(docs=[{**info, "pageCount": "1"} for info in files],
                        chatType="PptAgentMultiFile", isUploadToEnhance=True)
