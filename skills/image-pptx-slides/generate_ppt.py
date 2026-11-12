@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate editable image-model/SDK PowerPoint files on PopAI beta, or download a PPTX."""
+"""Create or continue editable PowerPoint conversations on PopAI beta, or download a PPTX."""
 
 import argparse
 import hashlib
@@ -126,7 +126,7 @@ def apply_event(event, state):
     if kind.startswith("TOOL_CALLS-ask_user_question"):
         state["question"] = param
         state["interactive"] = event.get("interactive") is True
-        emit("question", content=param, interactive=state["interactive"])
+        emit("question", content=decode(param) or param, interactive=state["interactive"])
     elif kind == "TOOL_CALLS-pptx" or event.get("nodeId") == "pptx":
         media = decode(event.get("media"))
         entries = media if isinstance(media, list) else [media]
@@ -140,6 +140,7 @@ def apply_event(event, state):
                 state["interactive"] = False
                 emit("pptx_available", **state["result"], is_end=False)
     elif kind == "NODE_END":
+        state["interactive"] = False
         if param:
             state["summary"] = param
             emit("summary", text=param)
@@ -203,10 +204,11 @@ def generate(token, channel_id, query, files):
                 if state["interactive"]:
                     emit("needs_input", channel_id=channel_id, question=state.get("question"),
                          web_url=f"{WEB}/{channel_id}", is_end=False)
-                    raise RuntimeError("Generation requires user input; continue on the beta webpage")
+                    return {"status": "needs_input", "question": state.get("question"),
+                            "summary": state["summary"]}
                 if not state["result"]:
-                    raise RuntimeError("Stream finished without a PPTX download URL")
-                return {**state["result"], "summary": state["summary"]}
+                    return {"status": "turn_complete", "summary": state["summary"]}
+                return {**state["result"], "status": "pptx_ready", "summary": state["summary"]}
     raise RuntimeError("Generation stream closed without last:true; inspect the beta channel before retrying")
 
 
@@ -238,8 +240,9 @@ def download_pptx(url, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--query", "-q", help="Initial presentation requirements")
+    mode.add_argument("--query", "-q", help="New presentation requirements, follow-up edits, or a clarifying answer")
     mode.add_argument("--download-url", help="Download an existing PPTX URL without generation")
+    parser.add_argument("--channel-id", help="Continue this existing beta channel; omit to create a new one")
     parser.add_argument("--files", "-f", nargs="+", action="extend", default=[], metavar="FILE",
                         help="Local reference files of any format, separated by spaces (1-5 files total)")
     parser.add_argument("--output", "-o", help="Download and validate the PPTX at this local .pptx path")
@@ -247,9 +250,11 @@ def main():
     if args.output and Path(args.output).suffix.lower() != ".pptx":
         parser.error("--output must have the .pptx extension")
     if args.download_url:
-        if not http_url(args.download_url) or not args.output or args.files:
-            parser.error("--download-url requires an HTTP(S) URL and --output, and excludes --files")
+        if not http_url(args.download_url) or not args.output or args.files or args.channel_id:
+            parser.error("--download-url requires an HTTP(S) URL and --output, and excludes --files and --channel-id")
     else:
+        if args.channel_id is not None and not args.channel_id.strip():
+            parser.error("--channel-id must be nonempty")
         if not args.query.strip():
             parser.error("--query must be nonempty")
         if len(args.files) > 5:
@@ -260,7 +265,7 @@ def main():
         token = os.getenv("POPAI_BETA_ACCESS_TOKEN")
         if not token or not token.strip():
             parser.error("POPAI_BETA_ACCESS_TOKEN environment variable with beta access is required")
-    channel_id = None
+    channel_id = args.channel_id
     try:
         if args.download_url:
             local_path = download_pptx(args.download_url, args.output)
@@ -270,10 +275,14 @@ def main():
         for file_path in args.files:
             emit("uploading", file_name=Path(file_path).name)
             files.append(upload_file(token, file_path))
-        channel_id = create_channel(token, args.query, files)
+        channel_id = channel_id or create_channel(token, args.query, files)
         emit("channel", channel_id=channel_id, web_url=f"{WEB}/{channel_id}")
         result = generate(token, channel_id, args.query, files)
         result.update(channel_id=channel_id, web_url=f"{WEB}/{channel_id}")
+        status = result.pop("status")
+        if status != "pptx_ready":
+            emit(status, **result, is_end=status == "turn_complete", pptx_ready=False)
+            return 0
         if args.output:
             emit("export_result", **result, is_end=False)
             result["local_path"] = download_pptx(result["pptx_url"], args.output)

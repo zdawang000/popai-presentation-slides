@@ -1,105 +1,104 @@
 ---
 name: image-pptx-slides
-description: 使用 PopAI beta 环境的图片模型与 PowerPoint SDK 生成可编辑的 PowerPoint (.pptx) 文件。当用户要求通过图片模型制作可编辑 PPT，或明确指定 image-pptx-slides、beta.01ww.org/agentic-pptx 时使用。支持首轮生成、任意格式的本地参考文件上传（单次最多 5 个）及 PPTX 下载。
+description: 使用 PopAI beta 的图片模型与 PowerPoint SDK 创建和修改可编辑 PPTX。用户要求通过图片模型制作 PPT，或指定 image-pptx-slides、image-pptx-skill、beta.01ww.org/ai-powerpoint 或 agentic-pptx 时使用。支持本地文件上传、同一会话多轮修改、回答澄清问题及 PPTX 下载。
 metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env": ["POPAI_BETA_ACCESS_TOKEN"] }, "primaryEnv": "POPAI_BETA_ACCESS_TOKEN" } }
 ---
 
-# Image PPTX Slides（内测版）
+# Image PPTX Slides
 
-使用图片模型设计幻灯片，再通过服务端 PowerPoint SDK 构建可编辑的 PPTX。文字等内容以 PowerPoint 元素组织；插画、背景等仍可能保留为图片，不承诺每个视觉元素都能单独编辑。
+通过 PopAI 图片模型设计幻灯片，再由服务端 PowerPoint SDK 构建可编辑 PPTX。文字等内容以 PowerPoint 元素组织；插画和背景仍可能是图片，不承诺每个视觉元素都能单独编辑。
 
-网页入口：`https://beta.01ww.org/agentic-pptx/<channelId>`。
-API 环境固定为 `https://api.01ww.org`。仅支持首轮生成和下载，每次生成都创建新会话。
+- beta 首页：`https://beta.01ww.org/ai-powerpoint`
+- 已有会话：`https://beta.01ww.org/agentic-pptx/<channelId>`
+- API：`https://api.01ww.org`，新建会话使用 `templateId: "900021"`。
 
-## 环境准备
+## 环境与入口
 
-需要 Python 3、`requests`，以及有内测权限的 beta 账号 Access Token。
+使用本目录的 `generate_ppt.py`；从其他目录调用时传脚本绝对路径。需要 Python 3、`requests` 和有 beta 权限的 `POPAI_BETA_ACCESS_TOKEN` 环境变量。缺少依赖时安装 `requests`。令牌仅从该变量读取，不回退到生产令牌，不写入脚本、skill 或日志。
 
-```bash
-python3 -m pip install requests
-export POPAI_BETA_ACCESS_TOKEN="<beta_access_token>"
-```
+根据任务选择：
 
-从 beta 账号获取令牌，通过独立变量 `POPAI_BETA_ACCESS_TOKEN` 传入；脚本不会回退读取线上环境的 `POPAI_ACCESS_TOKEN`。不把令牌写入 skill、脚本或输出日志。
+- 新建 PPT：`--query`，省略 `--channel-id`。
+- 修改已有 PPT、继续讨论或回答问题：`--channel-id` 加 `--query`，复用原会话。
+- 本轮新增材料：同时传 `--files`；新建和后续轮次均支持。
+- 只下载已有文件：`--download-url` 加 `--output`，不需要令牌。
 
-脚本为本 skill 目录中的 `generate_ppt.py`。下面的命令在该目录执行；从其他目录调用时使用脚本的绝对路径。
+保留用户的主题、受众、页数、语言、内容与视觉要求。后续修改应明确涉及哪些页、要改什么；不为了修改而新建会话。优先使用当前对话已经记录的 `channel_id` 或用户给出的会话 URL；有多个候选且不能判断时再询问。
 
-## 首轮生成
-
-将用户的主题、受众、页数、语言和视觉要求合并成一条清晰的 `--query`。保留用户已给出的要求；常规选择可以直接补全，不必为调用接口重复确认。
-
-PopAI 内置 `deep_research` 工具。需要联网搜索的信息，可以在 `--query` 中说明搜集需求，并附上相关网页链接，由 PopAI 搜索和整理。若制作 slides 依赖本地资料，则必须通过 `--files` 上传这些资料。PopAI 无法直接读取调用方的本地文件，也无法仅凭 query 中的文件名或路径获取文件内容；联网搜索不能替代缺失的本地资料。不上传所需文件，就无法获得足够的资料信息来完成用户要求的 slides。
-
-本地参考文件支持任意格式，包括但不限于 PDF、DOCX、PPTX、图片、表格、音频、视频、Markdown（`.md`）和代码文件。用户提供本地材料时，直接通过 `--files` 传入，无需先转换为文档或粘贴到 query。一次可混合传入 1–5 个文件，多个路径用空格分隔，含空格的路径加引号。
+## 新建与文件上传
 
 ```bash
-# 生成并提供下载地址
-python3 generate_ppt.py --query "为一年级小朋友制作6页中文PPT，介绍加减乘除。句子短，例子直观，采用明亮的儿童插画风格。"
-
-# 生成并下载到本地
 python3 generate_ppt.py --query "制作6页中文产品介绍，面向潜在客户。" \
   --output "/absolute/path/产品介绍.pptx"
 
-# 一次使用 5 个不同格式的本地参考文件
 python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主要发现。" \
-  --files "/absolute/path/说明.md" "/absolute/path/访谈.mp3" "/absolute/path/演示.mp4" "/absolute/path/main.py" "/absolute/path/数据.xlsx" \
+  --files "/absolute/path/说明.md" "/absolute/path/数据.xlsx" \
   --output "/absolute/path/汇报.pptx"
 ```
 
-### 参数及作用
+本地材料必须通过 `--files` 上传，query 中的本地路径或文件名不能让服务端读取文件。上传入口不限制扩展名，可传 PDF、DOCX、PPTX、图片、表格、音视频、Markdown 和代码文件；实际解析能力取决于服务端，不把上传成功当作内容已正确理解。脚本单次允许 1–5 个文件，支持混合格式和重复 `--files` 参数，含空格的路径须加引号。
 
-| 参数 | 作用与约束 |
+文件上传后作为本轮 `fileUrls` 提交。说明每个附件的用途（内容来源、风格参考、Logo 等）；不要把作为参考上传的 PPTX 自动声称为已应用的母版模板。用户明确要求应用模板时，确认服务端返回的实际结果。
+
+需要联网搜集的信息可写入 query 并附参考网页，交由 PopAI 的 `deep_research` 处理；这不能替代缺失的本地材料。
+
+## 多轮修改与追加材料
+
+```bash
+python3 generate_ppt.py --channel-id "<channelId>" \
+  --query "将第3页改成左右对比布局，保留数据；统一全稿标题字号。" \
+  --output "/absolute/path/汇报-修订.pptx"
+
+python3 generate_ppt.py --channel-id "<channelId>" \
+  --query "根据新附件更新第5页数据，并补充一页结论。" \
+  --files "/absolute/path/最新数据.xlsx" \
+  --output "/absolute/path/汇报-更新.pptx"
+```
+
+指定 `--channel-id` 会直接调用 `/api/v1/chat/send`，不会再调用 `getChannel`。历史消息与工作中的 PPTX 由服务端会话维护；不必反复上传已提交材料。每次只附本轮新增或替换的文件，并在 query 中说明替换关系。
+
+正常情况下，等上一轮完成再发下一轮；澄清回答是例外。每轮重新收集 PPTX 地址，不能将上一轮地址当作本轮修改结果。
+
+## 澄清问题与连接管理
+
+通过可返回进程会话 ID 的执行工具运行长任务，读取 JSON 行进度。脚本流处理预算为 20 分钟；持续跟踪进程并向用户报告有意义的变化。
+
+当出现 `question` 且 `interactive: true`：
+
+1. 读取 `content` 中的问题、选项和倒计时（若有）。答案已在用户要求中时直接据此回答，否则向用户提问。
+2. 保持原生成进程及 SSE 连接运行，不要为了等待用户主动结束它。
+3. 收到回答后，用第二个进程在同一 channel 提交：
+
+   ```bash
+   python3 generate_ppt.py --channel-id "<channelId>" \
+     --query "面向投资人，中文，10页，采用简洁商务风。"
+   ```
+
+4. 回答请求可能仅返回 `turn_complete`；这表示该请求结束，不代表 PPT 已生成。继续读取原进程，文件可能从原连接返回。
+5. 服务端可能在等待超时后自行继续。不要将超时解释为用户已回答；若原轮次已完成，用户迟到的回答应作为同一会话的后续修改处理。
+
+若流正常结束但仍明确等待回答，脚本返回 `needs_input`，保留会话并在用户回答后续聊。若原连接意外中断，则先检查会话状态（可打开 beta 网页），不要自动重发整条生成请求。无法确认原任务状态时说明不确定性，避免重复生成或计费。
+
+## 完成、下载与交付
+
+stdout 每行一个 JSON 对象。`channel` 提供会话 ID 和链接；`uploading`、`task`、`search`、`tool_result`、`summary`、`question` 是进度。不要向用户逐条转发工具内部细节。
+
+| 最终状态 | 含义与处理 |
 | --- | --- |
-| `--query` / `-q` | 首轮生成需求，必须为非空文本。页数、语言、风格和参考网页 URL 都写在这里；这些要求由服务端 agent 处理。与 `--download-url` 互斥。 |
-| `--files` / `-f` | 依赖本地资料时必传；无本地资料依赖时可省略。传入 1–5 个任意格式的本地参考文件，多个路径用空格分隔，可混合格式；重复使用此参数时合计仍最多 5 个。每个路径必须指向已存在的文件，含空格的路径加引号。上传后用于本次生成的内容参考；不将 PPTX 文件自动应用为版式模板。仅用于生成。 |
-| `--output` / `-o` | 可选，本地 `.pptx` 保存路径。生成时省略此参数只返回下载地址；提供此参数则等待生成完成后下载。支持创建父目录，输出绝对路径。单独下载时必须提供。 |
-| `--download-url` | 从已获得的 PPTX HTTP(S) 地址单独下载，不创建会话、不发起生成，也不需要 `POPAI_BETA_ACCESS_TOKEN`。必须同时提供 `--output`，不能与 `--query` 或 `--files` 混用。 |
-| `--help` / `-h` | 显示参数帮助，不调用 API。 |
+| `pptx_ready` 且 `is_end: true` | 本轮正常结束并取得 PPTX 地址；指定 output 时也已完成本地下载和结构检查。 |
+| `turn_complete` 且 `pptx_ready: false` | 本次请求正常结束但没有产出文件；可为讨论或回答确认，不能声称生成或修改成功。若用户要求文件，检查原连接或会话状态。 |
+| `needs_input` | 需要用户回答，继续原会话，不当作生成失败或完成。 |
+| `error` 或非零退出码 | 失败；保留 channel 和已有文件地址用于检查或重试下载。 |
 
-### 执行与完成判定
+`TOOL_CALLS-pptx`（或 `nodeId: "pptx"`）中的 `media[].url` 是 SDK 产出的文件，`imgList` 是预览。中间的 `pptx_available` 不代表成功：必须等待 `last: true` 且没有错误。不能将预览截图打包成 PPTX 交付为可编辑文件。
 
-1. 检查 beta 令牌和参考文件，调用脚本。为长任务预留最多 20 分钟，并根据 stdout 的 JSON 行向用户报告有效进度。
-2. 脚本上传材料，调用 `getChannel`（`templateId: "900021"`），随后调用 `/api/v1/chat/send`，读取 SSE。
-3. `TOOL_CALLS-pptx`（或 `nodeId: "pptx"`）中的 `media[0].url` 是服务端 SDK 产出的 PPTX；`imgList` 是预览截图。直接使用 PPTX 地址下载，不能将截图重新打包作为可编辑文件交付。
-4. 等待 `last: true` 且本次没有错误，再检查是否取得非空 PPTX 地址。只有最终 `pptx_ready` 且 `is_end: true` 才能报告成功；预览、工具调用及自然语言总结都不能单独证明完成。
-5. 交付 `pptx_url` 和 beta `web_url`；如指定了 `--output`，同时交付 `local_path`。可补充 `summary`，但完成状态以脚本结果为准。
-
-## 下载
-
-生成时提供 `--output` 即可自动下载。若已取得地址，只需下载，不要重新生成：
+成功后交付本轮 `pptx_url`、`web_url`，以及存在时的 `local_path`，并保留 `channel_id` 供后续修改。没有 `--output` 时仅返回远程地址。用户要求本地文件时必须指定 output；文件保存在当前任务允许的交付目录。
 
 ```bash
 python3 generate_ppt.py --download-url "https://example.com/generated.pptx" \
   --output "/absolute/path/演示文稿.pptx"
 ```
 
-下载使用文件地址本身，不向文件服务器发送 API 令牌。脚本先保存到临时文件，检查 PPTX ZIP 完整性和必需的 PowerPoint 文件，再替换目标文件。该检查只验证文件结构，不验证渲染效果或所有元素的可编辑性。
+下载不会向文件服务器发送 API 令牌。脚本先下载临时文件，验证 ZIP 完整性及 PowerPoint 必需文件，再替换目标文件。这仅验证结构，不证明渲染效果或所有元素的可编辑性。生成成功但下载失败时，从 `export_result` 取地址单独重试下载，不重新生成。
 
-生成成功但本地下载失败时，`export_result` 会保留 PPTX 地址；使用 `--download-url` 重试下载即可。
-
-## 输出与异常处理
-
-stdout 每行一个 JSON 对象。常见进度类型为 `channel`、`uploading`、`task`、`search`、`tool_result`、`summary`、`pptx_available` 和 `stream_end`。`pptx_available` 仅表示流中出现文件地址，仍须等待最终成功。
-
-最终生成结果示例：
-
-```json
-{
-  "type": "pptx_ready",
-  "channel_id": "<channelId>",
-  "pptx_url": "https://popai-file-boe.s3-accelerate.amazonaws.com/.../presentation.pptx",
-  "file_name": "presentation.pptx",
-  "preview_images": ["https://.../slide-1.jpeg"],
-  "preview_count": 6,
-  "summary": "演示文稿已生成。",
-  "web_url": "https://beta.01ww.org/agentic-pptx/<channelId>",
-  "local_path": "/absolute/path/演示文稿.pptx",
-  "is_end": true
-}
-```
-
-未指定 `--output` 时不包含 `local_path`；单独下载的 `download_ready` 返回 `pptx_url`、`local_path` 和 `is_end: true`。
-
-- `error` 或非零退出码表示失败，不报告完成。
-- 流未正常结束、超时或服务端报错时，保留已输出的 `channel_id` 和网页地址供用户查看。不要自动重发生成请求，避免重复生成和计费。
-- 若服务端要求补充回答，输出 `needs_input` 并提示用户打开对应 beta 网页处理。本 skill 不发送后续消息。
+`--query/-q` 必须非空；`--files/-f` 是本轮本地文件路径；`--output/-o` 必须以 `.pptx` 结尾。`--download-url` 与 query、channel-id、files 互斥且必须指定 output。`--help` 不访问 API。
