@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create or continue editable PowerPoint conversations on PopAI beta, or download a PPTX."""
+"""Create or continue editable PowerPoint conversations on PopAI beta, and export through the webpage Download API."""
 
 import argparse
 import hashlib
@@ -8,10 +8,9 @@ import mimetypes
 import os
 from pathlib import Path
 import sys
-import tempfile
 import time
+import tempfile
 from urllib.parse import quote, urlparse
-import zipfile
 
 import requests
 
@@ -134,11 +133,11 @@ def apply_event(event, state):
             if isinstance(entry, dict) and http_url(entry.get("url")):
                 previews = entry.get("imgList") or []
                 previews = [u for u in previews if http_url(u)] if isinstance(previews, list) else []
-                state["result"] = {"pptx_url": entry["url"],
+                state["result"] = {"raw_pptx_url": entry["url"],
                                    "file_name": entry.get("fileName") or "presentation.pptx",
                                    "preview_images": previews, "preview_count": len(previews)}
                 state["interactive"] = False
-                emit("pptx_available", **state["result"], is_end=False)
+                emit("raw_pptx_available", **state["result"], is_end=False, final_download_ready=False)
     elif kind == "NODE_END":
         state["interactive"] = False
         if param:
@@ -208,30 +207,31 @@ def generate(token, channel_id, query, files):
                             "summary": state["summary"]}
                 if not state["result"]:
                     return {"status": "turn_complete", "summary": state["summary"]}
-                return {**state["result"], "status": "pptx_ready", "summary": state["summary"]}
+                return {**state["result"], "status": "export_required", "summary": state["summary"]}
     raise RuntimeError("Generation stream closed without last:true; inspect the beta channel before retrying")
 
 
-def download_pptx(url, output):
+def export_pptx(token, channel_id, output):
+    # Same authenticated export endpoint as the editor Download control.
+    data = api_data(requests.post(
+        f"{API}/api/v1/ppt/editor/download", headers=headers(token),
+        params={"channelId": channel_id}, timeout=(15, 300)))
+    url = data.get("url") if isinstance(data, dict) else None
+    if not http_url(url):
+        raise RuntimeError("Editor export returned no usable URL")
     path = Path(output).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        # Signed file URLs must not receive the API authorization header.
+        # Do not send the API token to object storage.
         with requests.get(url, stream=True, timeout=(15, 180)) as response:
             response.raise_for_status()
-            with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.",
-                                             suffix=".part", delete=False) as target:
+            with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".part", delete=False) as target:
                 temporary = Path(target.name)
                 for chunk in response.iter_content(65536):
                     target.write(chunk)
-        with zipfile.ZipFile(temporary) as package:
-            if not {"[Content_Types].xml", "ppt/presentation.xml"}.issubset(package.namelist()):
-                raise ValueError("Downloaded file is not a PowerPoint package")
-            if package.testzip() is not None:
-                raise ValueError("Downloaded PPTX package is corrupt")
         temporary.replace(path)
-        return str(path)
+        return {"pptx_url": url, "local_path": str(path)}
     finally:
         if temporary:
             temporary.unlink(missing_ok=True)
@@ -240,36 +240,34 @@ def download_pptx(url, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--download", action="store_true", help="Export an existing channel via the editor Download API")
     mode.add_argument("--query", "-q", help="New presentation requirements, follow-up edits, or a clarifying answer")
-    mode.add_argument("--download-url", help="Download an existing PPTX URL without generation")
     parser.add_argument("--channel-id", help="Continue this existing beta channel; omit to create a new one")
     parser.add_argument("--files", "-f", nargs="+", action="extend", default=[], metavar="FILE",
                         help="Local reference files of any format, separated by spaces (1-5 files total)")
-    parser.add_argument("--output", "-o", help="Download and validate the PPTX at this local .pptx path")
+    parser.add_argument("--output", "-o", help="Save the editor-exported PPTX to this path")
     args = parser.parse_args()
     if args.output and Path(args.output).suffix.lower() != ".pptx":
         parser.error("--output must have the .pptx extension")
-    if args.download_url:
-        if not http_url(args.download_url) or not args.output or args.files or args.channel_id:
-            parser.error("--download-url requires an HTTP(S) URL and --output, and excludes --files and --channel-id")
-    else:
-        if args.channel_id is not None and not args.channel_id.strip():
-            parser.error("--channel-id must be nonempty")
-        if not args.query.strip():
-            parser.error("--query must be nonempty")
-        if len(args.files) > 5:
-            parser.error("Maximum 5 reference files allowed")
-        for file_path in args.files:
-            if not Path(file_path).is_file():
-                parser.error(f"Reference file not found: {file_path}")
-        token = os.getenv("POPAI_BETA_ACCESS_TOKEN")
-        if not token or not token.strip():
-            parser.error("POPAI_BETA_ACCESS_TOKEN environment variable with beta access is required")
+    if args.download and (not args.channel_id or not args.output or args.files):
+        parser.error("--download requires --channel-id and --output, and excludes --files")
+    if args.channel_id is not None and not args.channel_id.strip():
+        parser.error("--channel-id must be nonempty")
+    if args.query is not None and not args.query.strip():
+        parser.error("--query must be nonempty")
+    if len(args.files) > 5:
+        parser.error("Maximum 5 reference files allowed")
+    for file_path in args.files:
+        if not Path(file_path).is_file():
+            parser.error(f"Reference file not found: {file_path}")
+    token = os.getenv("POPAI_BETA_ACCESS_TOKEN")
+    if not token or not token.strip():
+        parser.error("POPAI_BETA_ACCESS_TOKEN environment variable with beta access is required")
     channel_id = args.channel_id
     try:
-        if args.download_url:
-            local_path = download_pptx(args.download_url, args.output)
-            emit("download_ready", pptx_url=args.download_url, local_path=local_path, is_end=True)
+        if args.download:
+            result = export_pptx(token, channel_id, args.output)
+            emit("download_ready", **result, channel_id=channel_id, web_url=f"{WEB}/{channel_id}", is_end=True)
             return 0
         files = []
         for file_path in args.files:
@@ -280,13 +278,16 @@ def main():
         result = generate(token, channel_id, args.query, files)
         result.update(channel_id=channel_id, web_url=f"{WEB}/{channel_id}")
         status = result.pop("status")
-        if status != "pptx_ready":
-            emit(status, **result, is_end=status == "turn_complete", pptx_ready=False)
+        if status != "export_required":
+            emit(status, **result, is_end=status == "turn_complete", final_download_ready=False)
             return 0
         if args.output:
-            emit("export_result", **result, is_end=False)
-            result["local_path"] = download_pptx(result["pptx_url"], args.output)
-        emit("pptx_ready", **result, is_end=True)
+            exported = export_pptx(token, channel_id, args.output)
+            emit("download_ready", **exported, channel_id=channel_id, web_url=f"{WEB}/{channel_id}", is_end=True)
+            return 0
+        emit("export_required", **result, is_end=False, generation_complete=True,
+             final_download_ready=False, download_method="editor_download_api",
+             next_action="Run --download --channel-id with --output to export via the editor Download API. Do not deliver raw_pptx_url.")
         return 0
     except Exception as error:
         emit("error", message=str(error), channel_id=channel_id,

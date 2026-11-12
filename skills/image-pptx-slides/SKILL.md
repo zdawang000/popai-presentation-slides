@@ -1,6 +1,6 @@
 ---
 name: image-pptx-slides
-description: 使用 PopAI beta 的图片模型与 PowerPoint SDK 创建和修改可编辑 PPTX。用户要求通过图片模型制作 PPT，或指定 image-pptx-slides、image-pptx-skill、beta.01ww.org/ai-powerpoint 或 agentic-pptx 时使用。支持本地文件上传、同一会话多轮修改、回答澄清问题及 PPTX 下载。
+description: 使用 PopAI beta 的图片模型与 PowerPoint SDK 创建和修改可编辑 PPTX。用户要求通过图片模型制作 PPT，或指定 image-pptx-slides、image-pptx-skill、beta.01ww.org/ai-powerpoint 或 agentic-pptx 时使用。支持本地文件上传、同一会话多轮修改、回答澄清问题及通过页面 Download 对应接口导出最终 PPTX。
 metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"], "env": ["POPAI_BETA_ACCESS_TOKEN"] }, "primaryEnv": "POPAI_BETA_ACCESS_TOKEN" } }
 ---
 
@@ -21,19 +21,17 @@ metadata: { "openclaw": { "emoji": "📽️", "requires": { "bins": ["python3"],
 - 新建 PPT：`--query`，省略 `--channel-id`。
 - 修改已有 PPT、继续讨论或回答问题：`--channel-id` 加 `--query`，复用原会话。
 - 本轮新增材料：同时传 `--files`；新建和后续轮次均支持。
-- 只下载已有文件：`--download-url` 加 `--output`，不需要令牌。
+- 下载最终文件：运行 `--download --channel-id <channelId> --output /absolute/path/file.pptx`，调用顶部 Download 对应的导出接口，不使用 SSE 原始文件地址。新建或修改时也可传 `--output` 自动导出。
 
 保留用户的主题、受众、页数、语言、内容与视觉要求。后续修改应明确涉及哪些页、要改什么；不为了修改而新建会话。优先使用当前对话已经记录的 `channel_id` 或用户给出的会话 URL；有多个候选且不能判断时再询问。
 
 ## 新建与文件上传
 
 ```bash
-python3 generate_ppt.py --query "制作6页中文产品介绍，面向潜在客户。" \
-  --output "/absolute/path/产品介绍.pptx"
+python3 generate_ppt.py --query "制作6页中文产品介绍，面向潜在客户。"
 
 python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主要发现。" \
-  --files "/absolute/path/说明.md" "/absolute/path/数据.xlsx" \
-  --output "/absolute/path/汇报.pptx"
+  --files "/absolute/path/说明.md" "/absolute/path/数据.xlsx"
 ```
 
 本地材料必须通过 `--files` 上传，query 中的本地路径或文件名不能让服务端读取文件。上传入口不限制扩展名，可传 PDF、DOCX、PPTX、图片、表格、音视频、Markdown 和代码文件；实际解析能力取决于服务端，不把上传成功当作内容已正确理解。脚本单次允许 1–5 个文件，支持混合格式和重复 `--files` 参数，含空格的路径须加引号。
@@ -46,13 +44,11 @@ python3 generate_ppt.py --query "根据附件制作8页中文汇报，突出主�
 
 ```bash
 python3 generate_ppt.py --channel-id "<channelId>" \
-  --query "将第3页改成左右对比布局，保留数据；统一全稿标题字号。" \
-  --output "/absolute/path/汇报-修订.pptx"
+  --query "将第3页改成左右对比布局，保留数据；统一全稿标题字号。"
 
 python3 generate_ppt.py --channel-id "<channelId>" \
   --query "根据新附件更新第5页数据，并补充一页结论。" \
-  --files "/absolute/path/最新数据.xlsx" \
-  --output "/absolute/path/汇报-更新.pptx"
+  --files "/absolute/path/最新数据.xlsx"
 ```
 
 指定 `--channel-id` 会直接调用 `/api/v1/chat/send`，不会再调用 `getChannel`。历史消息与工作中的 PPTX 由服务端会话维护；不必反复上传已提交材料。每次只附本轮新增或替换的文件，并在 query 中说明替换关系。
@@ -81,24 +77,32 @@ python3 generate_ppt.py --channel-id "<channelId>" \
 
 ## 完成、下载与交付
 
-stdout 每行一个 JSON 对象。`channel` 提供会话 ID 和链接；`uploading`、`task`、`search`、`tool_result`、`summary`、`question` 是进度。不要向用户逐条转发工具内部细节。
-
-| 最终状态 | 含义与处理 |
-| --- | --- |
-| `pptx_ready` 且 `is_end: true` | 本轮正常结束并取得 PPTX 地址；指定 output 时也已完成本地下载和结构检查。 |
-| `turn_complete` 且 `pptx_ready: false` | 本次请求正常结束但没有产出文件；可为讨论或回答确认，不能声称生成或修改成功。若用户要求文件，检查原连接或会话状态。 |
-| `needs_input` | 需要用户回答，继续原会话，不当作生成失败或完成。 |
-| `error` 或非零退出码 | 失败；保留 channel 和已有文件地址用于检查或重试下载。 |
-
-`TOOL_CALLS-pptx`（或 `nodeId: "pptx"`）中的 `media[].url` 是 SDK 产出的文件，`imgList` 是预览。中间的 `pptx_available` 不代表成功：必须等待 `last: true` 且没有错误。不能将预览截图打包成 PPTX 交付为可编辑文件。
-
-成功后交付本轮 `pptx_url`、`web_url`，以及存在时的 `local_path`，并保留 `channel_id` 供后续修改。没有 `--output` 时仅返回远程地址。用户要求本地文件时必须指定 output；文件保存在当前任务允许的交付目录。
+最终 PPTX 必须经过页面顶部 Download 对应的后端导出流程，不能直接下载 SSE 中的 `raw_pptx_url` 作为成品。优先由本 skill 脚本完成，不需要先打开浏览器。
 
 ```bash
-python3 generate_ppt.py --download-url "https://example.com/generated.pptx" \
+# 下载已有会话，不创建会话或发送生成消息
+python3 generate_ppt.py --download --channel-id "<channelId>" \
   --output "/absolute/path/演示文稿.pptx"
+
+# 生成或修改完成后自动导出
+python3 generate_ppt.py --channel-id "<channelId>" \
+  --query "更新第3页数据" --output "/absolute/path/修订版.pptx"
 ```
 
-下载不会向文件服务器发送 API 令牌。脚本先下载临时文件，验证 ZIP 完整性及 PowerPoint 必需文件，再替换目标文件。这仅验证结构，不证明渲染效果或所有元素的可编辑性。生成成功但下载失败时，从 `export_result` 取地址单独重试下载，不重新生成。
+脚本使用 beta 令牌调用 `POST https://api.01ww.org/api/v1/ppt/editor/download?channelId=<channelId>`，读取响应 `data.url`，再下载该文件；文件下载请求不携带 API 令牌。这是编辑器顶部 Download 对应的接口，会尝试保存当前编辑、嵌入字体并返回导出地址。不要猜测其他导出接口，也不要绕过账号权限或使用原始文件作为失败回退。
 
-`--query/-q` 必须非空；`--files/-f` 是本轮本地文件路径；`--output/-o` 必须以 `.pptx` 结尾。`--download-url` 与 query、channel-id、files 互斥且必须指定 output。`--help` 不访问 API。
+下载先写临时文件，HTTP 下载完成后保存到 output。不检查文件完整性或字体嵌入记录，字体处理由服务端导出流程负责。
+
+| 状态 | 含义与处理 |
+| --- | --- |
+| `download_ready` 且 `is_end: true` | 已通过导出接口完成下载；交付 `local_path` 和 `web_url`。 |
+| `export_required` | 生成已结束但未指定 output；再运行 download 模式完成交付。 |
+| `turn_complete` | 请求结束但未产出文件；可为讨论或回答确认，不能声称文件已生成。 |
+| `needs_input` | 需要用户回答，继续原会话。 |
+| `error` 或非零退出码 | 失败；保留会话信息。导出失败只重试 download，不重发生成消息。 |
+
+中间的 `raw_pptx_available` 不代表生成或下载完成。须等待流的 `last: true` 且没有错误，然后经过导出接口。`imgList` 是预览，不能将截图打包成可编辑文件交付。保留 `channel_id` 供多轮修改使用。
+
+只有接口确实无法完成且需要诊断时才打开会话页面，尝试顶部 Download（Version history 旁，不是嵌入编辑器 File 菜单）。遇到认证或权限问题，报告具体错误并请求所需登录或令牌修复，不以直链下载代替。
+
+`--query/-q` 和 `--download` 互斥。download 模式必须同时提供 `--channel-id` 和 `.pptx` 后缀的 `--output/-o`，不能传 files。query 模式可用 `--files/-f` 添加本轮附件，可选 output 自动导出；澄清或无文件回复不会触发导出。`--download-url` 不支持，避免绕过字体处理。`--help` 不访问 API。
